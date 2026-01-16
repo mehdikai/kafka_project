@@ -1,0 +1,73 @@
+1-built the container for kafka service using dcker compose file
+
+
+2-create the topics :
+# Créer topic tp8-input
+docker exec -it kafka_project-kafka-1 kafka-topics --create \
+  --topic tp8-input \
+  --bootstrap-server localhost:9092 \
+  --partitions 1 \
+  --replication-factor 1
+
+# Créer topic tp8-dlq
+docker exec -it kafka_project-kafka-1 kafka-topics --create \
+  --topic tp8-dlq \
+  --bootstrap-server localhost:9092 \
+  --partitions 1 \
+  --replication-factor 1
+
+# Vérifier les topics créés
+docker exec -it kafka_project-kafka-1 kafka-topics --list \
+  --bootstrap-server localhost:9092
+```
+Vous devriez voir:
+```
+tp8-input
+tp8-dlq
+
+# Vérifier
+docker exec -it $(docker ps -q -f name=kafka) kafka-topics --list \
+  --bootstrap-server localhost:9092
+
+
+3-Producer - send valides/invalides messages
+producer.py:
+
+
+4-Consumer avec logique DLQ
+consumer.py
+
+
+5-Consumer DLQ - Lecture des erreurs
+dlq_consumer.py
+
+
+6-Exécution dans l'ordre:
+install the requirements :
+pip install -r requirements.txt
+Terminal 1 - DLQ Consumer:
+bashpython dlq_consumer.py
+Terminal 2 - Consumer principal:
+bashpython consumer.py
+Terminal 3 - Producer:
+python producer.py
+
+
+7-Stratégie de reprise des messages DLQ
+dlq_retry.py:
+
+
+Résumé des stratégies DLQ
+3 approches principales:
+
+Retry automatique (dlq_retry.py):
+Correction automatique et renvoi
+Limite de tentatives
+
+Analyse manuelle :
+Inspection des messages
+Correction et réinjection manuelle
+
+Archivage :
+Messages impossibles à traiter
+Conservation pour audit
