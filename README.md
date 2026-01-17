@@ -1,29 +1,36 @@
-# TP8 - Dead Letter Queue (DLQ) avec Kafka
+Dead Letter Queue (DLQ) avec Kafka
 
-Implémentation du pattern Dead Letter Queue pour gérer les messages en erreur dans Kafka.
+Implémentation du pattern Dead Letter Queue pour gérer les ventes invalides dans Kafka avec validation multi-critères.
 
 ## 📋 Objectifs
 
 - Mettre en place un pattern de Dead Letter Queue
-- Distinguer les messages valides des messages en erreur
-- Rediriger les messages invalides vers un topic de DLQ
-- Implémenter une stratégie de reprise des messages en erreur
+- Valider les données de ventes (CSV) avec plusieurs critères
+- Rediriger les ventes invalides vers un topic de DLQ
+- Implémenter une stratégie de correction automatique
+- Limiter les tentatives de reprise (max 3)ur
 
 ## 🏗️ Architecture
 
 ```
-Topic Principal (tp8-input)
-         ↓
-    Consumer
-    /      \
-   ✅       ❌
-Valide   Invalide
-   ↓         ↓
-Traité    DLQ (tp8-dlq)
-            ↓
-       DLQ Consumer
-            ↓
-      Retry Strategy
+sales.csv
+    ↓
+Producer (lit CSV)
+    ↓
+Topic Principal 
+    ↓
+Consumer (Validation)
+  /      \
+ ✅       ❌
+Valid   Invalid
+  ↓        ↓
+Traité   DLQ (tp8-dlq)
+           ↓
+      DLQ Consumer
+           ↓
+    Retry Strategy (auto-correction)
+           ↓
+    Renvoi vers tp8-input (max 3x)
 ```
 
 ## 🚀 Démarrage
@@ -60,8 +67,17 @@ docker exec -it kafka_project-kafka-1 kafka-topics --create \
 
 3. **Installer les dépendances Python:**
 ```bash
-pip install kafka-python
+pip install requirements.txt
 ```
+## ✅ Critères de Validation
+
+Le consumer valide chaque vente selon ces critères:
+
+1. **Champs vides** - Tous les champs requis doivent être remplis (eventTime, store, product, qty, unitPrice)
+2. **Date future** - eventTime ne doit pas être dans le futur
+3. **Valeurs négatives/nulles** - qty et unitPrice doivent être > 0
+4. **Format invalide** - store doit commencer par 'S', product par 'p'
+5. **Types numériques** - qty et unitPrice doivent être des nombres valides
 
 ## 🎯 Utilisation
 
@@ -94,16 +110,25 @@ python producer.py
    └── dlq_consumer.py        # Consumer du topic DLQ
 ├── producer.py            # Producteur de messages valides/invalides
 ├── dlq_retry.py           # Stratégie de reprise des messages
+├── sales.csv
 └── README.md
 ```
 
-## 🔄 Stratégie de Reprise
+## 🔄 Stratégie de Reprise (dlq_retry.py)
 
-Le fichier `dlq_retry.py` implémente 3 stratégies:
+Le système de correction automatique applique les corrections suivantes:
 
-1. **Retry automatique** - Correction et renvoi (max 3 tentatives)
-2. **Analyse manuelle** - Inspection et correction manuelle
-3. **Archivage** - Conservation pour audit
+### Corrections Automatiques:
+- **Champs vides** → Valeurs par défaut (S0, p0)
+- **Quantité invalide** → Corrigée vers 1
+- **Prix invalide** → Corrigé vers 10.0
+- **Format invalide** → Corrigé (S0 pour store, p0 pour product)
+- **Date future/invalide** → Corrigée vers la date actuelle
+
+### Limite de Retry:
+- Maximum **3 tentatives** par vente
+- Après 3 échecs → Intervention manuelle nécessaire
+- Chaque tentative est trackée avec `retry_count`
 
 Pour lancer la reprise:
 ```bash
@@ -112,25 +137,30 @@ python dlq_retry.py
 
 ## 📊 Format des Messages
 
-**Message Valide:**
+**Vente Valide:**
 ```json
 {
-  "id": 1,
-  "type": "VALID",
-  "data": "Message valide 1"
+  "eventTime": "2026-01-10T12:00:15Z",
+  "store": "S1",
+  "product": "p4",
+  "qty": "1",
+  "unitPrice": "30.0"
 }
 ```
 
-**Message Invalide (DLQ):**
+**Vente Invalide → DLQ:**
 ```json
 {
-  "id": 3,
-  "type": "INVALID",
-  "data": "Message invalide 1",
-  "error_reason": "Type invalide",
+  "eventTime": "2026-01-28T12:00:51Z",
+  "store": "S1",
+  "product": "p4",
+  "qty": "7",
+  "unitPrice": "30.0",
+  "error_reason": "Date future détectée: 2026-01-28T12:00:51Z",
   "original_topic": "tp8-input",
   "original_partition": 0,
-  "original_offset": 2
+  "original_offset": 3,
+  "error_timestamp": "2026-01-17T10:56:03.123456"
 }
 ```
 
