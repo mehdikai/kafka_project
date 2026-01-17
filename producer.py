@@ -1,5 +1,6 @@
 from kafka import KafkaProducer
 import json
+import csv
 import time
 
 producer = KafkaProducer(
@@ -7,23 +8,29 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-# Messages valides et invalides
-messages = [
-    {"id": 1, "type": "VALID", "data": "Message valide 1"},
-    {"id": 2, "type": "VALID", "data": "Message valide 2"},
-    {"id": 3, "type": "INVALID", "data": "Message invalide 1"},
-    {"id": 4, "type": "VALID", "data": "Message valide 3"},
-    {"id": 5, "type": "INVALID", "data": "Message invalide 2"},
-    {"id": 6, "type": "INVALID", "data": "Message invalide 3"},
-    {"id": 7, "type": "VALID", "data": "Message valide 4"},
-]
+print("📤 Lecture du fichier sales.csv et envoi des messages...\n")
 
-print("📤 Envoi des messages...")
-for msg in messages:
-    producer.send('tp8-input', msg)
-    print(f"✅ Envoyé: {msg}")
-    time.sleep(0.5)
+# Lire le CSV
+with open('sales.csv', 'r') as file:
+    csv_reader = csv.DictReader(file)
+    count = 0
+    
+    for row in csv_reader:
+        # Créer le message depuis la ligne CSV
+        message = {
+            'eventTime': row['eventTime'],
+            'store': row['store'],
+            'product': row['product'],
+            'qty': row['qty'],
+            'unitPrice': row['unitPrice']
+        }
+        
+        # Envoyer vers Kafka
+        producer.send('tp8-input', message)
+        print(f"✅ Envoyé: {message}")
+        count += 1
+        time.sleep(0.2)
 
 producer.flush()
 producer.close()
-print("\n✨ Tous les messages ont été envoyés!")
+print(f"\n✨ {count} messages envoyés depuis sales.csv!")

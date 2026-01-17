@@ -1,4 +1,4 @@
-1-built the container for kafka service using dcker compose file
+1-built the container for kafka service using docker compose file
 
 
 2-create the topics :
